@@ -1,0 +1,18 @@
+{
+  "framework": "keras 3.15.1 (tensorflow)",
+  "parameters": 17793,
+  "equivalence": {
+    "rows": "validation",
+    "largest_gap": 3.725290298461914e-08,
+    "tolerance": 0.0001
+  },
+  "best_epoch": 75,
+  "val": {
+    "mae": 2.588515281677246,
+    "rmse": 3.734074592590332
+  },
+  "test": {
+    "mae": 2.484029769897461,
+    "rmse": 3.6602017879486084
+  }
+}
