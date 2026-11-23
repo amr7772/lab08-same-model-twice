@@ -122,7 +122,7 @@ The curves have the same shape as the PyTorch ones: a plateau around epoch 10 to
 | **PyTorch, mean** | | 90 | 2.473 | 2.405 | 5.1 | 72 |
 | **Keras, mean** | | 85 | 2.561 | 2.472 | 15.9 | 234 |
 
-The PyTorch row for seed 42 is exactly the Lab 07 main run, and the Keras row for seed 42 is exactly the run from `train_keras.py`, so the seeds do what they should. In short: the two frameworks give the same accuracy within the seed-to-seed spread, Keras took three times as long per run on this machine, its saved model is about three times bigger because it also holds the architecture and the optimizer state, and the Keras training code is much shorter. [COMPARISON.md](COMPARISON.md) has the details and my recommendation.
+The PyTorch row for seed 42 is exactly the Lab 07 main run, and the Keras row for seed 42 is exactly the run from `train_keras.py`, so the seeds do what they should. In short: the two frameworks give the same accuracy within the seed-to-seed spread, Keras took about three times as long per run on this machine (the seconds change from run to run, the ratio stays close to three), its saved model is about three times bigger because it also holds the architecture and the optimizer state, and the Keras training code is much shorter. [COMPARISON.md](COMPARISON.md) has the details and my recommendation.
 
 ## Tests
 

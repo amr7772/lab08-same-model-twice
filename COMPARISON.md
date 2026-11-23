@@ -15,7 +15,7 @@ Both versions train the same network on the same prepared rows with the same los
 | Saved model file | 72 KB | 234 KB |
 
 1. **Accuracy is the same in practice.** The test MAEs overlap across seeds (PyTorch 2.34 to 2.45, Keras 2.43 to 2.50), far below the linear regression's 8.76.
-2. **Keras was three times slower** on the same CPU. For a weekly job, neither time matters.
+2. **Keras was about three times slower** on the same CPU. For a weekly job, neither time matters.
 3. **Keras needs much less loop code.** My PyTorch `run_epoch` and `fit` are 41 lines I had to get right, plus 28 for the Dataset and loaders. In Keras the loop is one `fit` call, and two callbacks replace my best-weights code.
 4. **Saving differs.** The `.keras` file holds the architecture, weights and optimizer state and loads on its own. The PyTorch file is smaller but needs `model.py` to rebuild it.
 5. **Both in one environment clashed.** On Linux, loading TensorFlow first made the first PyTorch optimizer abort ("Option 'bitcode-mdindex-threshold' registered more than once") until I changed the import order.
