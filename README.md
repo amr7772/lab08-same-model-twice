@@ -1,23 +1,29 @@
-# Lakeshore Bike Demand
+# Lakeshore Bike Demand: the same model in PyTorch and Keras
 
 ## What it does
 
 This project predicts how many bikes will be rented from a Lakeshore Bike Share station in a given hour, using the hour of the day, the weather, whether it is a weekend and the type of station. The network and its training loop are written by hand in PyTorch, and the result is compared with two simple baselines so a planner can see whether the extra work is worth it. On the held-out test rows the network is off by about 2.3 bikes on average, against 8.8 for a linear regression and 9.8 for always guessing the mean.
 
+For Lab 08 the same network is built a second time in Keras (`keras_model.py`, `train_keras.py`), checked to be the same function as the PyTorch one, trained with the same settings and rows, and compared with it over three seeds (`compare.py`). The comparison and my recommendation for the team are in [COMPARISON.md](COMPARISON.md).
+
 ## How to run it
 
 ```bash
 conda env create -f environment.yml
-conda activate lab07-first-principles
+conda activate lab08-same-model-twice
 
-python train.py            # recreates everything in reports/ (about a minute on a CPU)
+python train.py            # PyTorch: recreates the Lab 07 files in reports/ (about a minute on a CPU)
+python train_keras.py      # Keras: history_keras.csv, learning_curves_keras.png, metrics_keras.json
+python compare.py          # both frameworks, three seeds each: reports/comparison.csv (a few minutes)
 
 python -m ruff format --check .
 python -m ruff check .
 python -m pytest
 ```
 
-`train.py` seeds everything, so two runs on the same computer give identical numbers. On another machine the last digits may differ.
+`train.py`, `train_keras.py` and `compare.py` seed everything, so two runs on the same computer give identical losses and MAEs. On another machine the last digits may differ, and the `seconds` column in `comparison.csv` always changes from run to run.
+
+`train_keras.py` also saves the best Keras model with `ModelCheckpoint` to `checkpoints/keras_main.keras`. That file is binary and is recreated by the script, so I do not commit it: `checkpoints/` is in `.gitignore`. The `reports/` folder is committed.
 
 ## Data and split
 
@@ -44,13 +50,14 @@ I picked the main configuration by looking at validation loss and validation MAE
 
 ## Results
 
-Every number is in rentals (bikes per station-hour). The test rows were used once, for the final network only.
+Every number is in rentals (bikes per station-hour). The test rows were used once, for the final network only. The Keras row comes from `train_keras.py` and is explained in [The Keras version](#the-keras-version).
 
 | Model | Validation MAE | Validation RMSE | Test MAE | Test RMSE |
 |---|---|---|---|---|
 | Training mean | 9.95 | 14.18 | 9.85 | 13.79 |
 | Linear regression | 9.03 | 13.15 | 8.76 | 12.64 |
 | Network (best epoch 102) | 2.46 | 3.68 | 2.34 | 3.49 |
+| Keras network (best epoch 75) | 2.59 | 3.73 | 2.48 | 3.66 |
 
 The linear model barely beats the mean, and the reason is in the plot above. It can only add a fixed amount per hour, per degree and per station type. It cannot make a morning hump that exists on weekdays downtown but not in a park, and it cannot know that 08:00 matters a lot on a weekday and hardly at all on a Sunday. The network, with its hidden layers, can combine those features, and it cuts the error by about three quarters.
 
@@ -83,7 +90,58 @@ Each run changes one thing from the main run and keeps everything else, includin
 
 **long_run (overfitting, slowly).** Same network, 400 epochs. It follows the main run exactly until epoch 102, which is the best epoch again, and then the validation loss drifts up from about 13.5 to 15.8 while the training loss goes down to 7.3. Training longer only fits the noise in the training rows. Keeping the weights from the best epoch is what protects the final result here, and it is the reason `fit` restores them.
 
+## The Keras version
+
+**What I built.** `keras_model.py` builds the same network with `keras.Sequential`: the hidden size and the number of hidden layers are arguments, each hidden `Dense` layer uses ReLU, and the last `Dense(1)` has no activation. With 128 units it has 17,793 parameters, the same as `RentalNet`. `train_keras.py` trains it with `compile` and `fit`. It does not prepare the data again: it calls `prepare()` from `prepare.py` and gives Keras the same float32 arrays that the PyTorch loaders wrap. Its settings are not typed in a second time either, they are read from `train.MAIN`, so both versions use mean squared error, Adam at 3e-3, batches of 128, 120 epochs and seed 42. Keras uses `keras.utils.set_random_seed`, the TensorFlow backend and two callbacks:
+
+- `EarlyStopping(monitor="val_loss", patience=120, restore_best_weights=True)`. A patience equal to the number of epochs means the run never stops early, so it is as long as the PyTorch run, and the weights of the best epoch are put back at the end, which is what my PyTorch `fit` does by hand.
+- `ModelCheckpoint(..., save_best_only=True)`, which saves the best model to `checkpoints/`.
+
+`fit` prints the training loss, the validation loss and the validation MAE for every epoch, and the same three columns go to `reports/history_keras.csv`.
+
+**The equivalence check.** Before training anything, `train_keras.py` builds a PyTorch network with seed 42, copies its weights into a fresh Keras network and predicts the 1,200 validation rows with both. A PyTorch weight is stored as (outputs, inputs) and a Keras kernel as (inputs, outputs), so each weight is transposed on the way across, and the biases are copied as they are. The largest difference between the two sets of predictions is 3.7e-8 rentals, far inside the tolerance of 1e-4 that the check enforces. The two networks compute the same function.
+
+**What could not be made identical.** The starting weights: Keras starts from Glorot uniform weights and zero biases, PyTorch from its own scheme, so with the same seed the two runs start from different points. The order of the shuffled batches, because each framework has its own random generator. And Keras's Adam has a different default epsilon (1e-7 against 1e-8), so I set it to 1e-8 to match.
+
+**The Keras main run.** The best epoch is 75. Validation MAE 2.59 and test MAE 2.48, against 2.46 and 2.34 for the PyTorch main run (the table in [Results](#results)).
+
+![Learning curves of the Keras main run](reports/learning_curves_keras.png)
+
+The curves have the same shape as the PyTorch ones: a plateau around epoch 10 to 20, a fast drop until about epoch 40, and then the training loss keeps going down while the validation loss settles around 14 and drifts up slightly at the end.
+
+**Three seeds.** `compare.py` trains the main configuration in both frameworks with seeds 42, 43 and 44 and scores each final network on the test rows once (`reports/comparison.csv`, measured on a 2-core CPU):
+
+| Framework | Seed | Best epoch | Val MAE | Test MAE | Seconds | Saved file (KB) |
+|---|---|---|---|---|---|---|
+| PyTorch | 42 | 102 | 2.463 | 2.336 | 5.1 | 72 |
+| Keras | 42 | 75 | 2.589 | 2.484 | 15.3 | 234 |
+| PyTorch | 43 | 91 | 2.482 | 2.448 | 4.7 | 72 |
+| Keras | 43 | 62 | 2.614 | 2.432 | 17.4 | 234 |
+| PyTorch | 44 | 77 | 2.476 | 2.431 | 5.6 | 72 |
+| Keras | 44 | 118 | 2.480 | 2.500 | 15.0 | 234 |
+| **PyTorch, mean** | | 90 | 2.473 | 2.405 | 5.1 | 72 |
+| **Keras, mean** | | 85 | 2.561 | 2.472 | 15.9 | 234 |
+
+The PyTorch row for seed 42 is exactly the Lab 07 main run, and the Keras row for seed 42 is exactly the run from `train_keras.py`, so the seeds do what they should. In short: the two frameworks give the same accuracy within the seed-to-seed spread, Keras took three times as long per run on this machine, its saved model is about three times bigger because it also holds the architecture and the optimizer state, and the Keras training code is much shorter. [COMPARISON.md](COMPARISON.md) has the details and my recommendation.
+
+## Tests
+
+`python -m pytest` runs 33 tests. The 16 from Lab 07 (`test_prepare.py`, `test_model.py`, `test_train.py`) are unchanged. `tests/test_keras.py` adds ten test functions (17 tests, because one is parametrized):
+
+1. The Keras network returns one value per row, and `predict_keras` flattens `model.predict`'s `(N, 1)` to `(N,)`.
+2. The parameter count equals the PyTorch network's, parametrized over hidden sizes 4, 16, 64 and 128 and over two and three hidden layers.
+3. After the weight copy, both networks predict the same values on the validation rows within the tolerance.
+4. A copy that forgets to transpose the square hidden-to-hidden kernel is caught. That layer raises no shape error, so only the predictions can show the mistake. This is also why test 3 uses real rows and not zeros: with a zero input, every kernel is multiplied by nothing.
+5. Both versions use the same rows: the arrays given to Keras equal the tensors inside the PyTorch loaders, for all three splits.
+6. The Keras network can memorize one small batch of 32 rows.
+7. A saved and reloaded `.keras` model gives the same predictions.
+8. The best weights are restored: with a learning rate large enough that the last epoch is worse than the best one, the final model scores the best epoch's validation loss.
+9. The same seed repeats a short run, and every epoch logs the training loss, validation loss and validation MAE.
+10. `compare()` writes one row per framework and seed, with the required columns.
+
 ## Limitations
+
+The comparison covers one small network on one machine. The timings come from a 2-core CPU with no GPU, and a bigger model or a GPU could change which framework is faster. Three seeds are enough to see that the accuracy difference is smaller than the seed-to-seed spread, not enough to measure a small difference precisely.
 
 The data are invented. The table comes from a formula plus random noise, so everything above says how well a network can recover that formula and nothing about real Lakeshore riders. I would expect the real numbers to be worse.
 
